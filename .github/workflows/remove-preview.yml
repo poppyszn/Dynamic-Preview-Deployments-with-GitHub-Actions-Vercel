@@ -15,26 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Get branch name
+      - name: Extract branch name
         id: extract_branch
         run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
 
-      - name: Delete deployments for this PR branch
+      - name: Remove deployment for this PR branch
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         run: |
           npm install --global vercel
 
-          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          echo "🔍 Searching deployments tagged with pr_branch=$BRANCH_NAME"
+          DEPLOYMENTS=$(vercel ls --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --meta pr_branch=$BRANCH_NAME --yes)
 
-          echo "🔎 Listing deployments for project: $VERCEL_PROJECT_ID"
-          DEPLOYMENTS=$(vercel ls $VERCEL_PROJECT_ID --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes)
-
-          echo "📄 Filtering deployments for branch: $BRANCH_NAME"
-          # Grep for the branch name in the deployment URL or use metadata if available
-          DEPLOYMENT_URL=$(echo "$DEPLOYMENTS" | grep "$BRANCH_NAME" | awk '{print $2}' | tail -n1)
+          DEPLOYMENT_URL=$(echo "$DEPLOYMENTS" | grep vercel.app | awk '{print $2}' | tail -n1)
 
           if [[ -n "$DEPLOYMENT_URL" ]]; then
             echo "🧨 Removing deployment: $DEPLOYMENT_URL"
             vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
           else
-            echo "⚠️ No deployment found for branch: $BRANCH_NAME"
+            echo "⚠️ No matching deployment found with pr_branch=$BRANCH_NAME"
           fi

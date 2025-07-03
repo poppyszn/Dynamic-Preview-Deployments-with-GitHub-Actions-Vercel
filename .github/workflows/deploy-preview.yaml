@@ -11,6 +11,19 @@ on:
       - "**" # triggers on PRs into any branch
 
 jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Run Build
+        run: |
+            echo "⚠️ Skipping build..."
+
   Test:
     runs-on: ubuntu-latest
     steps:
@@ -41,10 +54,25 @@ jobs:
       - name: Pull Vercel Environment Info
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: 🧹 Clean up any previous preview deployments
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+        run: |
+          echo "🔎 Checking for previous deployments with tag pr_branch=$BRANCH_NAME"
+          DEPLOYMENTS=$(vercel ls --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --meta pr_branch=$BRANCH_NAME --yes)
+          DEPLOYMENT_URL=$(echo "$DEPLOYMENTS" | grep vercel.app | awk '{print $2}' | tail -n1)
+
+          if [[ -n "$DEPLOYMENT_URL" ]]; then
+            echo "🗑️ Removing existing preview deployment: $DEPLOYMENT_URL"
+            vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
+          else
+            echo "✅ No existing preview found for cleanup."
+          fi
+
       - name: Build Project
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy PR Preview with Branch Tag
+      - name: 🚀 Deploy PR Preview with Branch Tag
         id: deploy
         env:
           BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
@@ -52,7 +80,7 @@ jobs:
           DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=$BRANCH_NAME)
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR with Preview URL
+      - name: 💬 Comment on PR with Preview URL
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v6
         with:
@@ -64,4 +92,5 @@ jobs:
               repo: context.repo.repo,
               body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
             })
+
 
