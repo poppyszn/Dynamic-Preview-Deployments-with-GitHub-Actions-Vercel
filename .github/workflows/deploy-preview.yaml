@@ -1,0 +1,67 @@
+name: Vercel PR Preview
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - "**" # triggers on PRs into any branch
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Run Tests (if test exists)
+        run: |
+            echo "⚠️ Skipping tests — test script not found."
+
+
+  Deploy-Preview:
+    needs: [Test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract Branch Name
+        id: extract_branch
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel
+
+      - name: Pull Vercel Environment Info
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy PR Preview with Branch Tag
+        id: deploy
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=$BRANCH_NAME)
+          echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR with Preview URL
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
+            })
+

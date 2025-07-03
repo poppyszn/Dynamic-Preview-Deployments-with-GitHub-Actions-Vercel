@@ -1,0 +1,35 @@
+name: Remove Vercel Preview Deployment
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Get branch name
+        id: extract_branch
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+
+      - name: Delete deployments for this PR branch
+        run: |
+          npm install --global vercel
+
+          # List recent deployments (limit to reduce API noise)
+          DEPLOYMENTS=$(vercel ls $VERCEL_PROJECT_ID \
+            --token=$VERCEL_TOKEN \
+            --scope=$VERCEL_ORG_ID \
+            --limit=100 --yes)
+
+          echo "$DEPLOYMENTS" | grep ${{ steps.extract_branch.outputs.branch }} | awk '{print $1}' | while read -r id; do
+            echo "🧨 Removing deployment: $id"
+            vercel remove $id --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
+          done
