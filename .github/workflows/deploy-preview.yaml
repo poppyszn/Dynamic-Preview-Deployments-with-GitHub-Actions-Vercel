@@ -45,7 +45,23 @@ jobs:
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy PR Preview with Branch Tag
+        id: deploy
         env:
           BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
-        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=${BRANCH_NAME}
+        run: |
+          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=$BRANCH_NAME)
+          echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR with Preview URL
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
+            })
 
