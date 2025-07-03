@@ -15,21 +15,28 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Get branch name
+      - name: Extract branch name
         id: extract_branch
         run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
 
-      - name: Delete deployments for this PR branch
+      - name: Remove deployment for this PR branch
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         run: |
           npm install --global vercel
 
-          # List recent deployments (limit to reduce API noise)
-          DEPLOYMENTS=$(vercel ls $VERCEL_PROJECT_ID \
+          echo "🔍 Searching deployments tagged with pr_branch=$BRANCH_NAME"
+          
+          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          DEPLOYMENT_URL=$(vercel list -m pr_branch=$BRANCH_NAME \
             --token=$VERCEL_TOKEN \
             --scope=$VERCEL_ORG_ID \
-            --limit=100 --yes)
+            --yes | grep -Eo 'https://[^ >]+' | head -1)
 
-          echo "$DEPLOYMENTS" | grep ${{ steps.extract_branch.outputs.branch }} | awk '{print $1}' | while read -r id; do
-            echo "🧨 Removing deployment: $id"
-            vercel remove $id --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
-          done
+          if [[ -n "$DEPLOYMENT_URL" ]]; then
+            echo "🧨 Removing: $DEPLOYMENT_URL"
+            vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
+          else
+            echo "✅ Nothing to remove for pr_branch=$BRANCH_NAME"
+          fi
+

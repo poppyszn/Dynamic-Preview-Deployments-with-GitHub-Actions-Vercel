@@ -11,7 +11,22 @@ on:
       - "**" # triggers on PRs into any branch
 
 jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Run Build
+        id: build
+        run: |
+            echo "⚠️ Skipping build..."
+
   Test:
+    needs: [Build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -21,6 +36,7 @@ jobs:
           node-version: 18
 
       - name: Run Tests (if test exists)
+        id: test
         run: |
             echo "⚠️ Skipping tests — test script not found."
 
@@ -41,18 +57,67 @@ jobs:
       - name: Pull Vercel Environment Info
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: 🧹 Clean up previous preview deployment (if any)
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          echo "🔍 Looking for existing preview deployment for: $BRANCH_NAME"
+          DEPLOYMENT_URL=$(vercel list -m pr_branch=$BRANCH_NAME \
+            --token=$VERCEL_TOKEN \
+            --scope=$VERCEL_ORG_ID \
+            --yes | grep -Eo 'https://[^ >]+' | head -1)
+
+          if [[ -n "$DEPLOYMENT_URL" ]]; then
+            echo "🗑️ Removing: $DEPLOYMENT_URL"
+            vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
+          else
+            echo "✅ No existing preview found."
+          fi
+
       - name: Build Project
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy PR Preview with Branch Tag
+      - name: 🚀 Deploy PR Preview
         id: deploy
         env:
           BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=$BRANCH_NAME)
+          DEPLOY_URL=$(vercel deploy --prebuilt \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --meta pr_branch=$BRANCH_NAME)
+
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
-      - name: Comment on PR with Preview URL
+      - name: 🗑️ Delete previous preview comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const previewComment = comments.data.find(c =>
+              c.body && c.body.includes('<!-- vercel-preview -->')
+            );
+
+            if (previewComment) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previewComment.id,
+              });
+              console.log("🧹 Deleted previous preview comment.");
+            } else {
+              console.log("ℹ️ No previous preview comment found.");
+            }
+
+
+      - name: 💬 Comment on PR with Preview URL
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v6
         with:
@@ -62,6 +127,42 @@ jobs:
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
+              body: `<!-- vercel-preview -->\n✅ Deployment Successful\n🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
             })
 
+      - name: 💥 Report Failure to PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const prev = comments.data.find(c => c.body.includes('<!-- vercel-preview -->'));
+            if (prev) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prev.id,
+              });
+            }
+
+            const failures = [];
+            if (['failure', 'cancelled'].includes(steps.extract_branch.outcome)) failures.push('🧩 extracting branch');
+            if (['failure', 'cancelled'].includes(steps.build.outcome)) failures.push('🔧 building project');
+            if (['failure', 'cancelled'].includes(steps.deploy.outcome)) failures.push('🚀 deploying preview');
+
+            const msg = failures.length
+              ? `<!-- vercel-preview -->\n❌ Deployment failed during: ${failures.join(', ')}.`
+              : `<!-- vercel-preview -->\n❌ Deployment failed. Please check logs for details.`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: msg,
+            });
