@@ -24,10 +24,7 @@ jobs:
           npm install --global vercel
 
           # List recent deployments (limit to reduce API noise)
-          DEPLOYMENTS=$(vercel ls $VERCEL_PROJECT_ID \
-            --token=$VERCEL_TOKEN \
-            --scope=$VERCEL_ORG_ID \
-            --limit=100 --yes)
+          DEPLOYMENTS=$(vercel ls $VERCEL_PROJECT_ID --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes | grep $BRANCH_NAME | awk '{print $1}')
 
           echo "$DEPLOYMENTS" | grep ${{ steps.extract_branch.outputs.branch }} | awk '{print $1}' | while read -r id; do
             echo "🧨 Removing deployment: $id"
