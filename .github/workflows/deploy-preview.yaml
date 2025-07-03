@@ -21,10 +21,12 @@ jobs:
           node-version: 18
 
       - name: Run Build
+        id: build
         run: |
             echo "⚠️ Skipping build..."
 
   Test:
+    needs: [Build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -34,6 +36,7 @@ jobs:
           node-version: 18
 
       - name: Run Tests (if test exists)
+        id: test
         run: |
             echo "⚠️ Skipping tests — test script not found."
 
@@ -87,6 +90,33 @@ jobs:
 
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
+      - name: 🗑️ Delete previous preview comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const previewComment = comments.data.find(c =>
+              c.body && c.body.includes('<!-- vercel-preview -->')
+            );
+
+            if (previewComment) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previewComment.id,
+              });
+              console.log("🧹 Deleted previous preview comment.");
+            } else {
+              console.log("ℹ️ No previous preview comment found.");
+            }
+
+
       - name: 💬 Comment on PR with Preview URL
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v6
@@ -97,5 +127,42 @@ jobs:
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
+              body: `<!-- vercel-preview -->\n🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
             })
+
+      - name: 💥 Report Failure to PR
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const prev = comments.data.find(c => c.body.includes('<!-- vercel-preview -->'));
+            if (prev) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: prev.id,
+              });
+            }
+
+            const failures = [];
+            if (['failure', 'cancelled'].includes(steps.extract_branch.outcome)) failures.push('🧩 extracting branch');
+            if (['failure', 'cancelled'].includes(steps.build.outcome)) failures.push('🔧 building project');
+            if (['failure', 'cancelled'].includes(steps.deploy.outcome)) failures.push('🚀 deploying preview');
+
+            const msg = failures.length
+              ? `<!-- vercel-preview -->\n❌ Deployment failed during: ${failures.join(', ')}.`
+              : `<!-- vercel-preview -->\n❌ Deployment failed. Please check logs for details.`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: msg,
+            });
