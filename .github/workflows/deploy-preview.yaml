@@ -127,7 +127,7 @@ jobs:
               issue_number: context.payload.pull_request.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `<!-- vercel-preview -->\n🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
+              body: `<!-- vercel-preview -->\n✅ Deployment Successful\n🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
             })
 
       - name: 💥 Report Failure to PR
