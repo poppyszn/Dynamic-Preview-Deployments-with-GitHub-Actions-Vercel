@@ -1,0 +1,57 @@
+name: Vercel PR Preview
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - "**" # triggers on PRs into any branch
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          
+      - name: Run Tests (if test exists)
+        run: |
+          if npm run | grep -q "test"; then
+            echo "✅ test script found — running tests..."
+            npm ci
+            npm run test
+          else
+            echo "⚠️ Skipping tests — test script not found."
+          fi
+
+
+  Deploy-Preview:
+    needs: [Test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract Branch Name
+        id: extract_branch
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel
+
+      - name: Pull Vercel Environment Info
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy PR Preview with Branch Tag
+        env:
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=${BRANCH_NAME}
+

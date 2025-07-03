@@ -8,8 +8,7 @@ Angular project with Github Actions for preview and production deployment to [Ve
 
 Have a look at the pipelines in this repository. Both require some environment variables (`VERCEL_TOKEN`, `VERCEL_PROJECT_ID` and `VERCEL_ORG_ID`) which are configured via the GitHub repository settings.
 
-- [preview.yaml](.github/workflows/preview.yaml): testing & preview deployment for all pushes to all branches except `main`
-- [production.yaml](.github/workflows/production.yaml): production deployment for all pushes to `main`
+- [deploy-pr.yaml](.github/workflows/deploy-pr.yaml): testing & preview deployment for all PR's.
 
 ## Vercel config
 
