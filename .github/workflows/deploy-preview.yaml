@@ -90,32 +90,6 @@ jobs:
 
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
-      - name: 🗑️ Delete previous preview comment
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-            });
-
-            const previewComment = comments.data.find(c =>
-              c.body && c.body.includes('<!-- vercel-preview -->')
-            );
-
-            if (previewComment) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: previewComment.id,
-              });
-              console.log("🧹 Deleted previous preview comment.");
-            } else {
-              console.log("ℹ️ No previous preview comment found.");
-            }
-
 
       - name: 💬 Comment on PR with Preview URL
         if: github.event_name == 'pull_request'
@@ -136,24 +110,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const comments = await github.rest.issues.listComments({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-            });
-
-            const prev = comments.data.find(c => c.body.includes('<!-- vercel-preview -->'));
-            if (prev) {
-              await github.rest.issues.deleteComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: prev.id,
-              });
-            }
-
             const failures = [];
-            if (['failure', 'cancelled'].includes(steps.extract_branch.outcome)) failures.push('🧩 extracting branch');
             if (['failure', 'cancelled'].includes(steps.build.outcome)) failures.push('🔧 building project');
+            if (['failure', 'cancelled'].includes(steps.test.outcome)) failures.push('🔧 testing project');
             if (['failure', 'cancelled'].includes(steps.deploy.outcome)) failures.push('🚀 deploying preview');
 
             const msg = failures.length
