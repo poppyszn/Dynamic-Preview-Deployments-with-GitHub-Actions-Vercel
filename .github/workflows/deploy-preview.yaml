@@ -54,40 +54,37 @@ jobs:
       - name: Pull Vercel Environment Info
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: 🧹 Clean up any previous preview deployments
+      - name: 🧹 Clean up previous preview deployment (if any)
         env:
           BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
-          echo "🔎 Checking for previous deployments with tag pr_branch=$BRANCH_NAME"
-
-          npm install --global vercel
-
-          DEPLOYMENTS=$(vercel ls --meta pr_branch=$BRANCH_NAME \
+          echo "🔍 Looking for existing preview deployment for: $BRANCH_NAME"
+          DEPLOYMENT_URL=$(vercel list -m pr_branch=$BRANCH_NAME \
             --token=$VERCEL_TOKEN \
             --scope=$VERCEL_ORG_ID \
-            --yes)
-
-          DEPLOYMENT_URL=$(echo "$DEPLOYMENTS" | grep vercel.app | awk '{print $2}' | tail -n1)
+            --yes | grep -Eo 'https://[^ >]+' | head -1)
 
           if [[ -n "$DEPLOYMENT_URL" ]]; then
-            echo "🗑️ Removing existing preview deployment: $DEPLOYMENT_URL"
+            echo "🗑️ Removing: $DEPLOYMENT_URL"
             vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
           else
-            echo "✅ No existing preview found for cleanup."
+            echo "✅ No existing preview found."
           fi
-
 
       - name: Build Project
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: 🚀 Deploy PR Preview with Branch Tag
+      - name: 🚀 Deploy PR Preview
         id: deploy
         env:
           BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
         run: |
-          DEPLOY_URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }} --meta pr_branch=$BRANCH_NAME)
+          DEPLOY_URL=$(vercel deploy --prebuilt \
+            --token=${{ secrets.VERCEL_TOKEN }} \
+            --meta pr_branch=$BRANCH_NAME)
+
           echo "preview_url=$DEPLOY_URL" >> $GITHUB_OUTPUT
 
       - name: 💬 Comment on PR with Preview URL
@@ -102,5 +99,3 @@ jobs:
               repo: context.repo.repo,
               body: `🚀 Preview deployed: [${{ steps.deploy.outputs.preview_url }}](${{ steps.deploy.outputs.preview_url }})`
             })
-
-

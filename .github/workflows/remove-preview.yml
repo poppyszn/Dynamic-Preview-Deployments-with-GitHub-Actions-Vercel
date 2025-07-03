@@ -26,13 +26,17 @@ jobs:
           npm install --global vercel
 
           echo "🔍 Searching deployments tagged with pr_branch=$BRANCH_NAME"
-          DEPLOYMENTS=$(vercel ls --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --meta pr_branch=$BRANCH_NAME --yes)
-
-          DEPLOYMENT_URL=$(echo "$DEPLOYMENTS" | grep vercel.app | awk '{print $2}' | tail -n1)
+          
+          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          DEPLOYMENT_URL=$(vercel list -m pr_branch=$BRANCH_NAME \
+            --token=$VERCEL_TOKEN \
+            --scope=$VERCEL_ORG_ID \
+            --yes | grep -Eo 'https://[^ >]+' | head -1)
 
           if [[ -n "$DEPLOYMENT_URL" ]]; then
-            echo "🧨 Removing deployment: $DEPLOYMENT_URL"
+            echo "🧨 Removing: $DEPLOYMENT_URL"
             vercel remove "$DEPLOYMENT_URL" --token=$VERCEL_TOKEN --scope=$VERCEL_ORG_ID --yes
           else
-            echo "⚠️ No matching deployment found with pr_branch=$BRANCH_NAME"
+            echo "✅ Nothing to remove for pr_branch=$BRANCH_NAME"
           fi
+
