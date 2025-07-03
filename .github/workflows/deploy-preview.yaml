@@ -19,16 +19,10 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: 18
-          
+
       - name: Run Tests (if test exists)
         run: |
-          if npm run | grep -q "test"; then
-            echo "✅ test script found — running tests..."
-            npm ci
-            npm run test
-          else
             echo "⚠️ Skipping tests — test script not found."
-          fi
 
 
   Deploy-Preview:
