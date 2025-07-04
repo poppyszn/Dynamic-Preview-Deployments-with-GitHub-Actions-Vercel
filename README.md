@@ -1,15 +1,64 @@
-# Use GitHub Actions to Deploy to Vercel
+# Preview Deployment Pipeline with GitHub Actions & Vercel
 
-Angular project with Github Actions for preview and production deployment to [Vercel](https://vercel.com).
+> Automate, test, preview, and clean up with zero manual effort.
 
-🍿 YouTube Tutorial: https://youtu.be/FHVaWZjWec4
+![Architecture Overview](./github-vercel-workflow.jpeg)
 
-## The Pipelines
+This project sets up an automated CI/CD workflow using **GitHub Actions** to streamline frontend development. It ensures that every Pull Request gets its own staging environment on **Vercel**, complete with preview links, automated checks, and graceful teardown.
 
-Have a look at the pipelines in this repository. Both require some environment variables (`VERCEL_TOKEN`, `VERCEL_PROJECT_ID` and `VERCEL_ORG_ID`) which are configured via the GitHub repository settings.
+---
 
-- [deploy-pr.yaml](.github/workflows/deploy-pr.yaml): testing & preview deployment for all PR's.
+## 🔧 What It Does
 
-## Vercel config
+- Runs build and test checks on each PR push
+- Deletes any previous preview deployments for the PR
+- Deploys a fresh staging instance to Vercel
+- Comments the deployment URL directly in the PR
+- Cleans up the deployment once the PR is closed
 
-To initially create a Vercel project from your local machine, install Vercel CLI via `npm i -g vercel`, login with `vercel login` and then run `vercel link`. This will create a project in the Vercel cloud and furthermore it will create a subfolder `.vercel` in your project where you can find the `projectId` and the `orgId` which you need to run the pipelines. Furthermore you need a API acess token. You can get this directly [from Vercel](https://vercel.com/account/tokens).
+![Final Output](./final-outcome.jpeg)
+
+---
+
+## ✨ Why It’s Useful
+
+- Instant feedback for reviewers
+- Eliminates stale preview clutter
+- Reduces human error in deployments
+- Works great in team settings with multiple simultaneous PRs
+
+---
+
+## 📽️ Inspiration
+
+This project was inspired and initially forked from [this YouTube video](https://youtu.be/FHVaWZjWec4) which lays the groundwork for dynamic Vercel preview deployments. I’ve extended it with improved logic for build/test validation and cleaner deployment lifecycle handling.
+
+---
+
+## 💡 Tech Stack
+
+- GitHub Actions (CI/CD automation)
+- Vercel (preview environments)
+- JavaScript/Node.js frontend projects (customizable)
+
+---
+
+## 🛠️ Setup
+
+1. **Fork this repo**  
+2. **Update Vercel tokens/secrets** in your GitHub repo settings
+3. **Customize the workflows** in `.github/workflows/` to fit your project's needs
+4. Push a PR and watch it deploy
+
+---
+
+## 📂 Workflows
+
+- `deploy-preview.yml`: Handles build, test, deploy, and PR commenting  
+- `remove-preview.yml`: Deletes Vercel deployment when PR is closed
+
+---
+
+## 🙌 Contributions
+
+Feel free to fork and improve on this. PRs are always welcome!
